@@ -350,7 +350,7 @@ export default function SmartPoolPage() {
           {smartPool.map((stock) => {
             // 获取股票的实际来源类型
             const sourceTypes = getStockSourceTypes(stock.symbol)
-            const hasBothSources = sourceTypes.hasDashboard && sourceTypes.hasIC
+            const hasBothSources = sourceTypes.has('dashboard') && sourceTypes.has('ic_meeting')
 
             const tech = technicalData[stock.symbol]
             const hasFailed = failedTechnicalLoads.has(stock.symbol)

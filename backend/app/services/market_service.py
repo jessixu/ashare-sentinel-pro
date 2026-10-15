@@ -2047,7 +2047,7 @@ def get_stock_main_business_tushare(symbol: str) -> Optional[Dict]:
 
         # 自定义 Tushare 配置
         _CUSTOM_TUSHARE_TOKEN = os.getenv('TUSHARE_TOKEN', '')
-        _CUSTOM_TUSHARE_URL = 'http://lianghua.nanyangqiankun.top'
+        _CUSTOM_TUSHARE_URL = os.getenv('TUSHARE_URL', 'http://lianghua.nanyangqiankun.top')
 
         if not _CUSTOM_TUSHARE_TOKEN:
             print("[TUSHARE] No TUSHARE_TOKEN configured")

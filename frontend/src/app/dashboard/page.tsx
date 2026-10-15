@@ -31,7 +31,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
     clearTimeout(id)
     console.error('[FETCH] Request failed:', error)
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('请求超时，AI 分析需要 40-60 秒，请稍后重试')
+      throw new Error('请求超时，AI 分析需要 60-90 秒，请稍后重试')
     }
     throw error
   }
@@ -124,7 +124,7 @@ export default function DashboardPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol: symbol.trim() })
-      })
+      }, 180000) // 3分钟超时，AI分析需要较长时间
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: "未知错误" }))

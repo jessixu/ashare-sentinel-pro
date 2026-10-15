@@ -86,29 +86,52 @@ async def search_financial_news(symbol: str, stock_name: str, max_results: int =
         }
 
     try:
-        # 构造高信噪比的搜索词
-        # 搜索策略：搜最新的研报观点、业绩预告、突发利空
-        query = f"{stock_name} {symbol} 股票 最新 研报 业绩 利好 利空"
+        # 构造更精确的搜索词（优先搜公司名+最新动态）
+        # 搜索策略：先搜公司名+最新新闻，再补充研报和业绩
+        queries = [
+            f"{stock_name} 最新消息",  # 最简洁，优先级最高
+            f"{stock_name} {symbol} 研报 评级",
+            f"{stock_name} 业绩 预告",
+        ]
 
-        print(f"[SEARCH] Tavily searching: {query}")
+        all_results = []
+        seen_urls = set()
 
-        # 执行搜索
-        response = client.search(
-            query=query,
-            search_depth="advanced",  # 深度搜索
-            max_results=max_results,
-            include_domains=[
-                "eastmoney.com",  # 东方财富
-                "xueqiu.com",       # 雪球
-                "sina.com.cn",      # 新浪财经
-                "jiemian.com",      # 界面新闻
-                "10jqka.com.cn",    # 同花顺
-                "cs.com.cn"         # 中证网
-            ],
-            days=7,  # 只搜索最近7天的内容
-            include_answer=False,
-            include_raw_content=False
-        )
+        # 执行多次搜索，合并结果
+        for query in queries:
+            print(f"[SEARCH] Tavily searching: {query}")
+
+            response = client.search(
+                query=query,
+                search_depth="advanced",
+                max_results=3,  # 每个查询只取前3条
+                include_domains=[
+                    "eastmoney.com",
+                    "xueqiu.com",
+                    "finance.sina.com.cn",  # 更精确的新浪财经
+                    "10jqka.com.cn",
+                    "cs.com.cn",
+                    "stcn.com",  # 证券时报
+                ],
+                days=7,
+                include_answer=False,
+                include_raw_content=False
+            )
+
+            # 合并去重
+            for result in response.get("results", []):
+                url = result.get("url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    all_results.append(result)
+
+            if len(all_results) >= max_results:
+                break  # 已收集足够结果
+
+        print(f"[OK] Tavily found {len(all_results)} unique results")
+
+        # 包装成标准响应格式
+        response = {"results": all_results[:max_results]}
 
         # 检查响应是否有效
         if not response or "results" not in response:
@@ -131,6 +154,26 @@ async def search_financial_news(symbol: str, stock_name: str, max_results: int =
             content = result.get("content", "")
             url = result.get("url", "")
             score = result.get("score", 0)
+            published_date = result.get("published_date", "")
+
+            # 过滤低质量结果
+            # 1. 排除纯列表页面（如"股票价格"、"研究报告"等索引页）
+            if any(kw in title for kw in ["股票价格", "股票行情", "研究报告|", "年度报告_", "行情_走势图"]):
+                print(f"[SEARCH] ⚠️  跳过索引页面: {title[:40]}...")
+                continue
+
+            # 2. 排除内容过短的结果（可能不是完整新闻）
+            if len(content) < 100:
+                print(f"[SEARCH] ⚠️  跳过内容过短: {title[:40]}...")
+                continue
+
+            # 3. 必须包含股票名称或代码（确保相关性）
+            if stock_name not in content and stock_name not in title and symbol not in content:
+                print(f"[SEARCH] ⚠️  跳过不相关内容: {title[:40]}...")
+                continue
+
+            # 打印每条搜索结果的详细信息
+            print(f"[SEARCH] ✅ Result: {title[:50]}... | Date: {published_date} | Score: {score}")
 
             # 截取内容（省 token）
             if content and len(content) > 500:
@@ -141,17 +184,24 @@ async def search_financial_news(symbol: str, stock_name: str, max_results: int =
                 "url": url,
                 "content": content,
                 "score": score,
-                "published_date": ""  # Tavily 可能不返回日期
+                "published_date": published_date
             })
 
             # 构建上下文
             if title and content:
-                context_parts.append(f"• 【{title}】\n  {content}\n  来源: {url}")
+                date_info = f" ({published_date})" if published_date and published_date != "未知" else ""
+                context_parts.append(f"• 【{title}】{date_info}\n  {content}\n  来源: {url}")
 
         # 生成摘要
-        summary = "\n\n".join(context_parts) if context_parts else "未找到相关新闻"
+        if not context_parts:
+            summary = f"未找到 {stock_name} 最近7天的相关新闻（可能暂无重要动态）"
+        else:
+            summary = f"【最近7天搜索结果 - {stock_name}】\n\n"
+            summary += "\n\n".join(context_parts)
+            if not any(r.get("published_date") for r in results):
+                summary += "\n\n⚠️ 注意：Tavily未返回发布日期，时效性需人工验证"
 
-        print(f"[OK] Tavily found {len(results)} results")
+        print(f"[OK] Filtered to {len(results)} high-quality results")
 
         return {
             "symbol": symbol,

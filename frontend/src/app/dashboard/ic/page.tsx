@@ -217,7 +217,7 @@ export default function ICMeetingPage() {
         if (err.message.includes('请求超时')) {
           errorMessage = "分析超时，请稍后重试。IC 投委会分析需要较长时间（通常 40-60 秒）"
         } else if (err.message.includes('Failed to fetch')) {
-          errorMessage = "无法连接到服务器，请检查后端是否正在运行 (端口 8004)"
+          errorMessage = "无法连接到服务器，请检查后端是否正在运行 (端口 8003)"
         } else {
           errorMessage = err.message
         }
